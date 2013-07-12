@@ -5,6 +5,8 @@ Uses commander.js and cheerio. Teaches command line application development
 and basic DOM parsing.
 
 References:
+ + restler
+   - https://github.com/danwrong/restler
 
  + cheerio
    - https://github.com/MatthewMueller/cheerio
@@ -21,11 +23,15 @@ References:
    - https://developer.mozilla.org/en-US/docs/JSON#JSON_in_Firefox_2
 */
 
+var sys = require('util');
+var rest = require('restler');
+
 var fs = require('fs');
 var program = require('commander');
 var cheerio = require('cheerio');
 var HTMLFILE_DEFAULT = "index.html";
 var CHECKSFILE_DEFAULT = "checks.json";
+ 
 
 var assertFileExists = function(infile) {
     var instr = infile.toString();
@@ -36,13 +42,16 @@ var assertFileExists = function(infile) {
     return instr;
 };
 
+
 var cheerioHtmlFile = function(htmlfile) {
     return cheerio.load(fs.readFileSync(htmlfile));
 };
 
+
 var loadChecks = function(checksfile) {
     return JSON.parse(fs.readFileSync(checksfile));
 };
+
 
 var checkHtmlFile = function(htmlfile, checksfile) {
     $ = cheerioHtmlFile(htmlfile);
@@ -55,20 +64,63 @@ var checkHtmlFile = function(htmlfile, checksfile) {
     return out;
 };
 
+
+
+var buildfn = function(checksfile) {
+    var response2console = function(result, response) {
+        if (result instanceof Error) {
+            console.error('Error: ' + util.format(response.message));
+        } else {
+            //console.error("Wrote %s", csvfile);
+            // not happy with this...
+            var tempfile = 'tempfile.txt';
+            fs.writeFileSync(tempfile, result);     
+            //console.log(result);
+            var checkJson = checkHtmlFile(tempfile, checksfile);
+            var outJson = JSON.stringify(checkJson, null, 4);
+            console.log(outJson);
+            fs.writeFileSync('graderSummary.txt', outJson);
+                      
+        }
+    };
+    return response2console;
+};
+
+
+var restlerHtmlFile = function(url, checksfile) {
+    var response2console = buildfn(checksfile);
+    rest.get(url).on('complete', response2console);
+};
+
+
+
 var clone = function(fn) {
     // Workaround for commander.js issue.
     // http://stackoverflow.com/a/6772648
     return fn.bind({});
 };
 
+
 if(require.main == module) {
     program
         .option('-c, --checks <check_file>', 'Path to checks.json', clone(assertFileExists), CHECKSFILE_DEFAULT)
         .option('-f, --file <html_file>', 'Path to index.html', clone(assertFileExists), HTMLFILE_DEFAULT)
+        .option('-u, --url <url>', 'URL to the website')
         .parse(process.argv);
-    var checkJson = checkHtmlFile(program.file, program.checks);
-    var outJson = JSON.stringify(checkJson, null, 4);
-    console.log(outJson);
+    var checkJson;
+    
+    if (program.url) {
+       console.log('Reads from url');
+       restlerHtmlFile(program.url, program.checks);
+    }
+    else if (program.file) {
+       console.log('Reads from file');
+       checkJson = checkHtmlFile(program.file, program.checks);
+     
+       var outJson = JSON.stringify(checkJson, null, 4);
+       console.log(outJson);
+       fs.writeFileSync('graderSummary.txt', outJson);
+    }
 } else {
     exports.checkHtmlFile = checkHtmlFile;
 }
